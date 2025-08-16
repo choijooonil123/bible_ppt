@@ -170,24 +170,23 @@ async function imgToDataURL(url){
 goBtn.addEventListener("click", async () => {
   if (goBtn.disabled) return;
   try {
-    // 초기화
+    // ====== 버튼 누르자마자 상태 표시 ======
     goBtn.disabled = true;
-    setBadge("run");
-    clearLog();
-    setProgress(0, 0);
-    log("생성 시작");
+    setBadge("run");          // 상태 뱃지: "진행중"
+    clearLog();               // 로그창 비우기
+    setProgress(0, 0);        // 진행률 초기화
+    log("생성 시작");         // 로그에 표시
 
-    // 입력 수집
+    // ====== 이후 단계 ======
     const items = splitToItems(refEl.value);
     if (!items.length) {
       throw new Error("성경 범위를 입력하세요.");
     }
     log(`입력 구간 수: ${items.length}`);
 
-    // 파싱
+    // 입력 파싱
     log("입력 파싱 중…");
     const refs = items.map(parseRef);
-    await sleep(0);
     log("입력 파싱 완료", "ok");
 
     // 배경 이미지
@@ -195,7 +194,7 @@ goBtn.addEventListener("click", async () => {
     const bgDataURL = await imgToDataURL(DEFAULTS.bgPath);
     log("배경 이미지 준비 완료", "ok");
 
-    // 구절 로드
+    // 성경 본문 로드
     log("성경 본문 로드…");
     const blocks = [];
     for (const ref of refs) {
@@ -203,18 +202,16 @@ goBtn.addEventListener("click", async () => {
       const verses = await fetchVerses(ref.book, ref.sCh, ref.sV, ref.eCh, ref.eV);
       if (!verses.length) throw new Error(`구절을 찾지 못했습니다: ${ref.book} ${ref.sCh}:${ref.sV}~${ref.eCh}:${ref.eV}`);
       blocks.push({ ref, verses });
-      await sleep(0);
     }
     log("본문 로드 완료", "ok");
 
-    // 전체 슬라이드 수 계산
+    // ===== 슬라이드 생성 단계 =====
     const totalSlides = DEFAULTS.oneVersePerSlide
       ? blocks.reduce((sum, b) => sum + b.verses.length, 0)
       : blocks.length;
     let madeSlides = 0;
     setProgress(madeSlides, totalSlides);
 
-    // PPT 생성
     log("PPT 슬라이드 생성 시작…");
     const pptx = new PptxGenJS();
     pptx.defineLayout({ name: "LAYOUT_16x9", width: 13.33, height: 7.5 });
@@ -225,32 +222,7 @@ goBtn.addEventListener("click", async () => {
       const titleText = `${ref.book} ${ref.sCh}:${ref.sV}` +
         (ref.eCh===ref.sCh && ref.eV===ref.sV ? "" : `~${ref.eCh===ref.sCh ? ref.eV : ref.eCh + ":" + ref.eV}`);
 
-      if (DEFAULTS.oneVersePerSlide) {
-        for (const vs of verses) {
-          const s = pptx.addSlide();
-          s.background = { data: bgDataURL };
-
-          s.addText(titleText, {
-            x:0, y:0.3, w:"100%", h:0.8, fontSize:40, bold:true, align:"center",
-            color: DEFAULTS.titleColor, fontFace: "Malgun Gothic"
-          });
-
-          const head = DEFAULTS.showVerseNo ? `${vs.ch}:${vs.v} ` : "";
-          const content = head + vs.text;
-          const lines = splitByLen(content, DEFAULTS.maxChars);
-          const fontSize = autoFont(DEFAULTS.baseFont, content.length);
-
-          s.addText(lines.join("\n"), {
-            x:1, y:1.2, w:11.33, h:5.5,
-            fontSize, bold:true, color: DEFAULTS.bodyColor,
-            align:"center", valign:"middle", fontFace: "Dotum"
-          });
-
-          madeSlides++;
-          setProgress(madeSlides, totalSlides);
-          if (madeSlides % 5 === 0) await sleep(0); // UI 갱신 틱
-        }
-      } else {
+      for (const vs of verses) {
         const s = pptx.addSlide();
         s.background = { data: bgDataURL };
 
@@ -259,11 +231,10 @@ goBtn.addEventListener("click", async () => {
           color: DEFAULTS.titleColor, fontFace: "Malgun Gothic"
         });
 
-        const merged = verses
-          .map(v => (DEFAULTS.showVerseNo ? `${v.ch}:${v.v} ` : "") + v.text)
-          .join(" ");
-        const lines = splitByLen(merged, DEFAULTS.maxChars);
-        const fontSize = autoFont(DEFAULTS.baseFont, merged.length);
+        const head = DEFAULTS.showVerseNo ? `${vs.ch}:${vs.v} ` : "";
+        const content = head + vs.text;
+        const lines = splitByLen(content, DEFAULTS.maxChars);
+        const fontSize = autoFont(DEFAULTS.baseFont, content.length);
 
         s.addText(lines.join("\n"), {
           x:1, y:1.2, w:11.33, h:5.5,
@@ -273,7 +244,6 @@ goBtn.addEventListener("click", async () => {
 
         madeSlides++;
         setProgress(madeSlides, totalSlides);
-        await sleep(0);
       }
     }
     log(`슬라이드 생성 완료 (${madeSlides}/${totalSlides})`, "ok");
@@ -293,3 +263,5 @@ goBtn.addEventListener("click", async () => {
     goBtn.disabled = false;
   }
 });
+
+
