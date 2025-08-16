@@ -1,4 +1,4 @@
-// ===== 성경 권 이름 매핑 (정식명 + 약칭) =====
+// ========= 성경 권 이름 매핑 (정식명 + 약칭) =========
 const BOOKS = [
   { canon:"창세기", aliases:["창"] }, { canon:"출애굽기", aliases:["출"] },
   { canon:"레위기", aliases:["레"] }, { canon:"민수기", aliases:["민"] },
@@ -36,284 +36,190 @@ const BOOKS = [
   { canon:"요한삼서", aliases:["요삼"] }, { canon:"유다서", aliases:["유"] },
   { canon:"요한계시록", aliases:["계"] },
 ];
-
 const BOOK_ALIAS_TO_CANON = (() => {
   const map = new Map();
-  BOOKS.forEach(({canon, aliases}) => {
+  BOOKS.forEach(({ canon, aliases }) => {
     map.set(canon, canon);
     aliases.forEach(a => map.set(a, canon));
   });
   return map;
 })();
 
-// ===== DOM =====
-const refEl = document.getElementById("ref");
-const goBtn = document.getElementById("go");
-
-const statusBadge = document.getElementById("statusBadge");
-const progBar = document.getElementById("progBar");
-const progText = document.getElementById("progText");
-const logEl = document.getElementById("log");
-
-// ===== 기본 옵션(고정) =====
-const DEFAULTS = {
-  bgPath: "BG_image.jpg",
+// ========= 고정 스타일/옵션 =========
+const STYLE = {
   titleColor: "558ED5",
-  bodyColor: "FFFF00",
-  maxChars: 20,
-  baseFont: 32,
+  bodyColor:  "FFFF00",
+  maxChars:   20,
+  baseFont:   32,
+  fontFaceBody:  "Dotum",
+  fontFaceTitle: "Malgun Gothic",
   showVerseNo: true,
-  oneVersePerSlide: true,
-  makeTitleSlide: false,
+  outputName:  "BibleVerses.pptx",
+  background:  "BG_image.jpg", // 있으면 사용, 없으면 무시
 };
 
-// ===== 상태/로그 유틸 =====
-function ts(){
-  const d = new Date();
-  const z = n => String(n).padStart(2,"0");
-  return `${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`;
-}
-function log(msg, type="info"){
-  const li = document.createElement("li");
-  if (type === "ok") li.classList.add("ok");
-  if (type === "err") li.classList.add("err");
-  li.innerHTML = `<time>[${ts()}]</time>${msg}`;
-  logEl.appendChild(li);
-  logEl.scrollTop = logEl.scrollHeight;
-}
-function clearLog(){
-  logEl.innerHTML = "";
-}
-function setBadge(state){
-  statusBadge.className = "badge " + state; // idle/run/ok/err
-  const text = { idle:"대기", run:"진행중", ok:"완료", err:"오류" }[state] || state;
-  statusBadge.textContent = text;
-}
-function setProgress(current, total){
-  if (total <= 0) { progBar.style.width = "0%"; progText.textContent = "0% (0/0)"; return; }
-  const pct = Math.round(current * 100 / total);
-  progBar.style.width = pct + "%";
-  progText.textContent = `${pct}% (${current}/${total})`;
-}
-function sleep(ms=0){ return new Promise(r=>setTimeout(r, ms)); }
+// ========= DOM =========
+const refEl    = document.getElementById("reference");
+const statusEl = document.getElementById("status");
 
-// ===== 유틸 =====
+// ========= 로그/진행 =========
+function clearStatus(){ statusEl.innerHTML = ""; }
+function logStatus(msg){
+  const p = document.createElement("p");
+  p.textContent = msg;
+  statusEl.appendChild(p);
+  statusEl.scrollTop = statusEl.scrollHeight;
+}
+function setProgress(cur, total){
+  const pct = total ? Math.round(cur*100/total) : 0;
+  logStatus(`진행률: ${pct}% (${cur}/${total})`);
+}
+
+// ========= 유틸 =========
 function trimAll(s){ return (s||"").replace(/\s+/g," ").trim(); }
-function splitToItems(input){
+function splitItems(input){
   return input.split(/[\n,]+/).map(s=>trimAll(s)).filter(Boolean);
 }
-function normalizeBookName(inputName){
-  const key = trimAll(inputName);
-  const canon = BOOK_ALIAS_TO_CANON.get(key);
-  if (!canon) throw new Error(`알 수 없는 성경 이름: "${inputName}"`);
+function normalizeBook(name){
+  const canon = BOOK_ALIAS_TO_CANON.get(trimAll(name));
+  if (!canon) throw new Error(`알 수 없는 성경 이름: "${name}"`);
   return canon;
 }
-
-// 입력 파서
+// A) 요 3:16~4:3  B) 요 3:16~18  C) 요 3:16
 function parseRef(text){
   const t = trimAll(text);
-  const pOtherCh = /^(.+?)\s+(\d+):(\d+)\s*~\s*(\d+):(\d+)$/; // A) 요 3:16~4:3
-  const pSameCh  = /^(.+?)\s+(\d+):(\d+)\s*~\s*(\d+)$/;       // B) 요 3:16~18
-  const pSingle  = /^(.+?)\s+(\d+):(\d+)$/;                   // C) 요 3:16
-  let m = t.match(pOtherCh);
-  if (m) return { book: normalizeBookName(m[1]), sCh:+m[2], sV:+m[3], eCh:+m[4], eV:+m[5] };
-  m = t.match(pSameCh);
-  if (m) return { book: normalizeBookName(m[1]), sCh:+m[2], sV:+m[3], eCh:+m[2], eV:+m[4] };
-  m = t.match(pSingle);
-  if (m) return { book: normalizeBookName(m[1]), sCh:+m[2], sV:+m[3], eCh:+m[2], eV:+m[3] };
-  throw new Error(`입력 형식 오류: "${text}"`);
+  const pA = /^(.+?)\s+(\d+):(\d+)\s*~\s*(\d+):(\d+)$/;
+  const pB = /^(.+?)\s+(\d+):(\d+)\s*~\s*(\d+)$/;
+  const pC = /^(.+?)\s+(\d+):(\d+)$/;
+
+  let m = t.match(pA);
+  if (m) return {book:normalizeBook(m[1]), sCh:+m[2], sV:+m[3], eCh:+m[4], eV:+m[5]};
+  m = t.match(pB);
+  if (m) return {book:normalizeBook(m[1]), sCh:+m[2], sV:+m[3], eCh:+m[2], eV:+m[4]};
+  m = t.match(pC);
+  if (m) return {book:normalizeBook(m[1]), sCh:+m[2], sV:+m[3], eCh:+m[2], eV:+m[3]};
+  throw new Error(`입력 형식 오류: "${text}" (예: 요 3:16, 요 3:16~18, 요 3:16~4:3)`);
 }
 
-async function fetchVerses(book, sCh, sV, eCh, eV) {
-  const res = await fetch(`bible/${book}.txt`);
-  if (!res.ok) throw new Error(`성경 파일을 찾을 수 없습니다: bible/${book}.txt`);
+async function exists(url){
+  try {
+    const res = await fetch(encodeURI(url), { method: "HEAD" });
+    return res.ok;
+  } catch { return false; }
+}
+
+async function fetchVerses(book, sCh, sV, eCh, eV){
+  const path = `bible/${book}.txt`;
+  const res = await fetch(encodeURI(path));
+  if (!res.ok) throw new Error(`성경 파일을 찾을 수 없습니다: ${path} (HTTP ${res.status})`);
   const txt = await res.text();
   const lines = txt.split(/\r?\n/);
   const out = [];
-  for (const line of lines) {
+  for (const line of lines){
     const m = line.match(/^(\d+):(\d+)\s+(.*)$/);
     if (!m) continue;
     const ch = +m[1], v = +m[2], body = m[3].trim();
     if ((ch > eCh) || (ch === eCh && v > eV)) break;
-    if ((ch > sCh) || (ch === sCh && v >= sV)) {
-      out.push({ch, v, text: body});
-    }
+    if ((ch > sCh) || (ch === sCh && v >= sV)) out.push({ch, v, text: body});
   }
   return out;
 }
 
-function splitByLen(s, maxLen){
+function chunkBy(s, maxLen){
   const arr = [];
   for (let i=0;i<s.length;i+=maxLen) arr.push(s.slice(i, i+maxLen));
   return arr;
 }
-function autoFont(base, totalChars){
-  if (totalChars <= 40) return base;
-  const over = totalChars - 40;
-  const dec = Math.min(14, Math.floor(over * 0.3));
+function autoFont(base, total){
+  if (total <= 40) return base;
+  const dec = Math.min(14, Math.floor((total-40)*0.3));
   return Math.max(18, base - dec);
 }
 
-async function imgToDataURL(url){
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`배경 이미지를 불러올 수 없습니다: ${url}`);
-  const blob = await res.blob();
-  return new Promise((resolve, reject)=>{
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = reject;
-    r.readAsDataURL(blob);
-  });
-}
+// ========= 메인: 버튼에서 호출 =========
+window.generatePPT = async function generatePPT(){
+  clearStatus();
+  logStatus("생성 시작");
 
-// ===== 메인 동작 =====
-// === (필수) DOM 바인딩은 DOMContentLoaded 이후에 ===
-document.addEventListener('DOMContentLoaded', () => {
-  // 기존 매핑/유틸/상태 UI 함수들은 앞서 쓰신 그대로 두고,
-  // 아래 핵심 부분만 교체하면 됩니다.
-
-  const refEl = document.getElementById("ref");
-  const goBtn = document.getElementById("go");
-
-  // 상태/로그 엘리먼트
-  const statusBadge = document.getElementById("statusBadge");
-  const progBar = document.getElementById("progBar");
-  const progText = document.getElementById("progText");
-  const logEl = document.getElementById("log");
-
-  // 보호적 헬퍼들
-  function ts(){ const d=new Date(),z=n=>String(n).padStart(2,'0'); return `${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`; }
-  function log(msg, type){ const li=document.createElement('li'); if(type==='ok')li.classList.add('ok'); if(type==='err')li.classList.add('err'); li.innerHTML=`<time>[${ts()}]</time>${msg}`; logEl.appendChild(li); logEl.scrollTop=logEl.scrollHeight; }
-  function clearLog(){ logEl.innerHTML=''; }
-  function setBadge(state){ statusBadge.className='badge '+state; statusBadge.textContent={idle:'대기',run:'진행중',ok:'완료',err:'오류'}[state]||state; }
-  function setProgress(cur,total){ const pct = total? Math.round(cur*100/total):0; progBar.style.width=pct+'%'; progText.textContent=`${pct}% (${cur}/${total})`; }
-
-  // 이미 정의해둔 BOOK 매핑/parseRef/fetchVerses 등은 그대로 사용하되,
-  // 아래 두 함수만 안전하게 바꿔주세요.
-
-  async function imgToDataURL(url){
-    // 한글 파일명/공백 등 경로 보호
-    const res = await fetch(encodeURI(url));
-    if (!res.ok) throw new Error(`배경 이미지를 불러올 수 없습니다: ${url} (HTTP ${res.status})`);
-    const blob = await res.blob();
-    return await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(blob); });
-  }
-
-  async function fetchVerses(book, sCh, sV, eCh, eV) {
-    // 한글 파일명 보호
-    const path = `bible/${book}.txt`;
-    const res = await fetch(encodeURI(path));
-    if (!res.ok) throw new Error(`성경 파일을 찾을 수 없습니다: ${path} (HTTP ${res.status})`);
-    const txt = await res.text();
-    const lines = txt.split(/\r?\n/);
-    const out = [];
-    for (const line of lines) {
-      const m = line.match(/^(\d+):(\d+)\s+(.*)$/);
-      if (!m) continue;
-      const ch = +m[1], v = +m[2], body = m[3].trim();
-      if ((ch > eCh) || (ch === eCh && v > eV)) break;
-      if ((ch > sCh) || (ch === sCh && v >= sV)) out.push({ch,v,text:body});
+  try{
+    if (typeof window.PptxGenJS === "undefined"){
+      throw new Error("PptxGenJS가 로드되지 않았습니다. (CDN 차단/네트워크 확인)");
     }
-    return out;
-  }
+    const raw = (refEl.value || "").trim();
+    if (!raw) throw new Error("성경 구절을 입력하세요.");
 
-  // 버튼 클릭 핸들러
-  goBtn.addEventListener('click', async () => {
-    if (goBtn.disabled) return;
+    // 1) 파싱
+    logStatus("입력값 파싱 중…");
+    const refs = splitItems(raw).map(parseRef);
+    logStatus(`입력 구간 수: ${refs.length}`);
 
-    // 0) 즉시 UI 반응
-    goBtn.disabled = true;
-    setBadge('run');
-    clearLog();
-    setProgress(0, 0);
-    log('생성 시작');
+    // 2) 배경 파일 확인
+    const hasBg = await exists(STYLE.background);
+    if (hasBg) logStatus(`배경 감지: ${STYLE.background}`);
 
-    try {
-      // 1) 환경 점검
-      if (typeof window.PptxGenJS === 'undefined') {
-        throw new Error('PptxGenJS가 로드되지 않았습니다. 네트워크 또는 CDN 차단 여부를 확인해 주세요.');
-      }
-
-      // 2) 입력 수집
-      const raw = (refEl.value || '').trim();
-      if (!raw) throw new Error('성경 범위를 입력하세요.');
-      const items = raw.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
-      log(`입력 구간 수: ${items.length}`);
-
-      // 3) 파싱
-      log('입력 파싱 중…');
-      const refs = items.map(parseRef); // <- 기존 parseRef 그대로 사용
-      log('입력 파싱 완료', 'ok');
-
-      // 4) 배경 로드
-      log('배경 이미지 로딩…');
-      const bgDataURL = await imgToDataURL('BG_image.jpg'); // 루트에 파일 반드시 존재
-      log('배경 이미지 준비 완료', 'ok');
-
-      // 5) 본문 로드
-      log('성경 본문 로드…');
-      const blocks = [];
-      for (const ref of refs) {
-        log(`- 로드: ${ref.book} ${ref.sCh}:${ref.sV}~${ref.eCh}:${ref.eV}`);
-        const verses = await fetchVerses(ref.book, ref.sCh, ref.sV, ref.eCh, ref.eV);
-        if (!verses.length) throw new Error(`구절을 찾지 못했습니다: ${ref.book} ${ref.sCh}:${ref.sV}~${ref.eCh}:${ref.eV}`);
-        blocks.push({ref, verses});
-      }
-      log('본문 로드 완료', 'ok');
-
-      // 6) PPT 생성
-      const totalSlides = blocks.reduce((sum,b)=> sum + b.verses.length, 0);
-      let madeSlides = 0;
-      setProgress(madeSlides, totalSlides);
-      log('PPT 슬라이드 생성 시작…');
-
-      const pptx = new PptxGenJS();
-      pptx.defineLayout({ name: 'LAYOUT_16x9', width: 13.33, height: 7.5 });
-      pptx.layout = 'LAYOUT_16x9';
-
-      for (const blk of blocks) {
-        const { ref, verses } = blk;
-        const titleText = `${ref.book} ${ref.sCh}:${ref.sV}` + (ref.eCh===ref.sCh && ref.eV===ref.sV ? '' : `~${ref.eCh===ref.sCh ? ref.eV : ref.eCh + ':' + ref.eV}`);
-
-        for (const vs of verses) {
-          const s = pptx.addSlide();
-          s.background = { data: bgDataURL };
-
-          s.addText(titleText, { x:0, y:0.3, w:'100%', h:0.8, fontSize:40, bold:true, align:'center', color:'558ED5', fontFace:'Malgun Gothic' });
-
-          const head = `${vs.ch}:${vs.v} `;
-          const content = head + vs.text;
-          const lines = [];
-          const maxLen = 20;
-          for (let i=0;i<content.length;i+=maxLen) lines.push(content.slice(i, i+maxLen));
-          const fontSize = Math.max(18, 32 - Math.min(14, Math.floor(Math.max(0, content.length-40)*0.3)));
-
-          s.addText(lines.join('\n'), { x:1, y:1.2, w:11.33, h:5.5, fontSize, bold:true, color:'FFFF00', align:'center', valign:'middle', fontFace:'Dotum' });
-
-          madeSlides++;
-          setProgress(madeSlides, totalSlides);
-        }
-      }
-      log(`슬라이드 생성 완료 (${madeSlides}/${totalSlides})`, 'ok');
-
-      // 7) 파일 저장
-      log('파일 저장…');
-      const filename = `성경슬라이드_${Date.now()}.pptx`;
-      await pptx.writeFile({ fileName: filename });
-      log(`완료: ${filename}`, 'ok');
-      setBadge('ok');
-
-    } catch (err) {
-      console.error(err);
-      setBadge('err');
-      log(err.message || String(err), 'err');
-      alert(err.message || String(err));
-    } finally {
-      goBtn.disabled = false;
+    // 3) 본문 로드
+    logStatus("성경 본문 로드…");
+    const blocks = [];
+    for (const ref of refs){
+      logStatus(`- 로드: ${ref.book} ${ref.sCh}:${ref.sV}~${ref.eCh}:${ref.eV}`);
+      const verses = await fetchVerses(ref.book, ref.sCh, ref.sV, ref.eCh, ref.eV);
+      if (!verses.length) throw new Error(`구절을 찾지 못했습니다: ${ref.book} ${ref.sCh}:${ref.sV}~${ref.eCh}:${ref.eV}`);
+      blocks.push({ref, verses});
     }
-  });
-});
+    logStatus("본문 로드 완료");
 
+    // 4) PPT 생성
+    const totalSlides = blocks.reduce((sum,b)=> sum + b.verses.length, 0);
+    let made = 0;
+    setProgress(made, totalSlides);
+    logStatus("PPT 슬라이드 생성 시작…");
 
+    const pptx = new PptxGenJS();
+    pptx.defineLayout({ name: "LAYOUT_16x9", width: 13.33, height: 7.5 });
+    pptx.layout = "LAYOUT_16x9";
 
+    for (const blk of blocks){
+      const { ref, verses } = blk;
+      const title =
+        `${ref.book} ${ref.sCh}:${ref.sV}` +
+        (ref.eCh===ref.sCh && ref.eV===ref.sV ? "" : `~${ref.eCh===ref.sCh ? ref.eV : ref.eCh+":"+ref.eV}`);
 
+      for (const vs of verses){
+        const s = pptx.addSlide();
+        if (hasBg) s.background = { path: STYLE.background };
+
+        // 제목
+        s.addText(title, {
+          x:0, y:0.3, w:"100%", h:0.8,
+          fontSize:40, bold:true, align:"center",
+          color:STYLE.titleColor, fontFace:STYLE.fontFaceTitle
+        });
+
+        // 본문
+        const head = STYLE.showVerseNo ? `${vs.ch}:${vs.v} ` : "";
+        const content = head + vs.text;
+        const lines = chunkBy(content, STYLE.maxChars);
+        const fz = autoFont(STYLE.baseFont, content.length);
+
+        s.addText(lines.join("\n"), {
+          x:1, y:1.2, w:11.33, h:5.5,
+          fontSize:fz, bold:true, color:STYLE.bodyColor,
+          align:"center", valign:"middle", fontFace:STYLE.fontFaceBody
+        });
+
+        made++;
+        if (made % 5 === 0 || made === totalSlides) setProgress(made, totalSlides);
+      }
+    }
+
+    logStatus("슬라이드 생성 완료");
+    logStatus("파일 저장…");
+    await pptx.writeFile(STYLE.outputName);
+    logStatus(`✅ 완료: ${STYLE.outputName}`);
+
+  }catch(err){
+    console.error(err);
+    logStatus(`❌ 오류: ${err.message || String(err)}`);
+    alert(err.message || String(err));
+  }
+};
