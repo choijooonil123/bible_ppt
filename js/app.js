@@ -1,5 +1,3 @@
-// ===== 1) 성경 권 이름 매핑 (정식명 + 약칭들) =====
-// 'canon' = 파일명(bible/폴더)에서 사용할 정식 이름
 // ===== 성경 권 이름 매핑 (정식명 + 약칭) =====
 const BOOKS = [
   { canon:"창세기", aliases:["창"] }, { canon:"출애굽기", aliases:["출"] },
@@ -52,6 +50,11 @@ const BOOK_ALIAS_TO_CANON = (() => {
 const refEl = document.getElementById("ref");
 const goBtn = document.getElementById("go");
 
+const statusBadge = document.getElementById("statusBadge");
+const progBar = document.getElementById("progBar");
+const progText = document.getElementById("progText");
+const logEl = document.getElementById("log");
+
 // ===== 기본 옵션(고정) =====
 const DEFAULTS = {
   bgPath: "BG_image.jpg",
@@ -61,8 +64,38 @@ const DEFAULTS = {
   baseFont: 32,
   showVerseNo: true,
   oneVersePerSlide: true,
-  makeTitleSlide: false, // 타이틀 슬라이드 미생성
+  makeTitleSlide: false,
 };
+
+// ===== 상태/로그 유틸 =====
+function ts(){
+  const d = new Date();
+  const z = n => String(n).padStart(2,"0");
+  return `${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`;
+}
+function log(msg, type="info"){
+  const li = document.createElement("li");
+  if (type === "ok") li.classList.add("ok");
+  if (type === "err") li.classList.add("err");
+  li.innerHTML = `<time>[${ts()}]</time>${msg}`;
+  logEl.appendChild(li);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function clearLog(){
+  logEl.innerHTML = "";
+}
+function setBadge(state){
+  statusBadge.className = "badge " + state; // idle/run/ok/err
+  const text = { idle:"대기", run:"진행중", ok:"완료", err:"오류" }[state] || state;
+  statusBadge.textContent = text;
+}
+function setProgress(current, total){
+  if (total <= 0) { progBar.style.width = "0%"; progText.textContent = "0% (0/0)"; return; }
+  const pct = Math.round(current * 100 / total);
+  progBar.style.width = pct + "%";
+  progText.textContent = `${pct}% (${current}/${total})`;
+}
+function sleep(ms=0){ return new Promise(r=>setTimeout(r, ms)); }
 
 // ===== 유틸 =====
 function trimAll(s){ return (s||"").replace(/\s+/g," ").trim(); }
@@ -76,29 +109,18 @@ function normalizeBookName(inputName){
   return canon;
 }
 
-// 입력 파서: A/B/C 형식
-// A) "요 3:16~4:3"  B) "요 3:16~18"  C) "요 3:16"
+// 입력 파서
 function parseRef(text){
   const t = trimAll(text);
-  const pOtherCh = /^(.+?)\s+(\d+):(\d+)\s*~\s*(\d+):(\d+)$/; // A
-  const pSameCh  = /^(.+?)\s+(\d+):(\d+)\s*~\s*(\d+)$/;       // B
-  const pSingle  = /^(.+?)\s+(\d+):(\d+)$/;                   // C
-
+  const pOtherCh = /^(.+?)\s+(\d+):(\d+)\s*~\s*(\d+):(\d+)$/; // A) 요 3:16~4:3
+  const pSameCh  = /^(.+?)\s+(\d+):(\d+)\s*~\s*(\d+)$/;       // B) 요 3:16~18
+  const pSingle  = /^(.+?)\s+(\d+):(\d+)$/;                   // C) 요 3:16
   let m = t.match(pOtherCh);
-  if (m) {
-    const book = normalizeBookName(m[1]);
-    return { book, sCh:+m[2], sV:+m[3], eCh:+m[4], eV:+m[5] };
-  }
+  if (m) return { book: normalizeBookName(m[1]), sCh:+m[2], sV:+m[3], eCh:+m[4], eV:+m[5] };
   m = t.match(pSameCh);
-  if (m) {
-    const book = normalizeBookName(m[1]);
-    return { book, sCh:+m[2], sV:+m[3], eCh:+m[2], eV:+m[4] };
-  }
+  if (m) return { book: normalizeBookName(m[1]), sCh:+m[2], sV:+m[3], eCh:+m[2], eV:+m[4] };
   m = t.match(pSingle);
-  if (m) {
-    const book = normalizeBookName(m[1]);
-    return { book, sCh:+m[2], sV:+m[3], eCh:+m[2], eV:+m[3] };
-  }
+  if (m) return { book: normalizeBookName(m[1]), sCh:+m[2], sV:+m[3], eCh:+m[2], eV:+m[3] };
   throw new Error(`입력 형식 오류: "${text}"`);
 }
 
@@ -109,7 +131,7 @@ async function fetchVerses(book, sCh, sV, eCh, eV) {
   const lines = txt.split(/\r?\n/);
   const out = [];
   for (const line of lines) {
-    const m = line.match(/^(\d+):(\d+)\s+(.*)$/); // "장:절 내용"
+    const m = line.match(/^(\d+):(\d+)\s+(.*)$/);
     if (!m) continue;
     const ch = +m[1], v = +m[2], body = m[3].trim();
     if ((ch > eCh) || (ch === eCh && v > eV)) break;
@@ -132,9 +154,7 @@ function autoFont(base, totalChars){
   return Math.max(18, base - dec);
 }
 
-// ===== PPT 생성 보조 =====
 async function imgToDataURL(url){
-  // BG_image.jpg를 dataURL로 변환 (same-origin 가정)
   const res = await fetch(url);
   if (!res.ok) throw new Error(`배경 이미지를 불러올 수 없습니다: ${url}`);
   const blob = await res.blob();
@@ -148,29 +168,57 @@ async function imgToDataURL(url){
 
 // ===== 메인 동작 =====
 goBtn.addEventListener("click", async () => {
+  if (goBtn.disabled) return;
   try {
+    // 초기화
+    goBtn.disabled = true;
+    setBadge("run");
+    clearLog();
+    setProgress(0, 0);
+    log("생성 시작");
+
+    // 입력 수집
     const items = splitToItems(refEl.value);
-    if (!items.length) { alert("성경 범위를 입력하세요."); return; }
-
-    const bgDataURL = await imgToDataURL(DEFAULTS.bgPath);
-
-    // 파싱 & 구절 로드
-    const blocks = [];
-    for (const raw of items) {
-      const ref = parseRef(raw);
-      const verses = await fetchVerses(ref.book, ref.sCh, ref.sV, ref.eCh, ref.eV);
-      if (!verses.length) {
-        throw new Error(`구절을 찾지 못했습니다: ${ref.book} ${ref.sCh}:${ref.sV}~${ref.eCh}:${ref.eV}`);
-      }
-      blocks.push({ ref, verses });
+    if (!items.length) {
+      throw new Error("성경 범위를 입력하세요.");
     }
+    log(`입력 구간 수: ${items.length}`);
+
+    // 파싱
+    log("입력 파싱 중…");
+    const refs = items.map(parseRef);
+    await sleep(0);
+    log("입력 파싱 완료", "ok");
+
+    // 배경 이미지
+    log("배경 이미지 로딩…");
+    const bgDataURL = await imgToDataURL(DEFAULTS.bgPath);
+    log("배경 이미지 준비 완료", "ok");
+
+    // 구절 로드
+    log("성경 본문 로드…");
+    const blocks = [];
+    for (const ref of refs) {
+      log(`- 로드: ${ref.book} ${ref.sCh}:${ref.sV}~${ref.eCh}:${ref.eV}`);
+      const verses = await fetchVerses(ref.book, ref.sCh, ref.sV, ref.eCh, ref.eV);
+      if (!verses.length) throw new Error(`구절을 찾지 못했습니다: ${ref.book} ${ref.sCh}:${ref.sV}~${ref.eCh}:${ref.eV}`);
+      blocks.push({ ref, verses });
+      await sleep(0);
+    }
+    log("본문 로드 완료", "ok");
+
+    // 전체 슬라이드 수 계산
+    const totalSlides = DEFAULTS.oneVersePerSlide
+      ? blocks.reduce((sum, b) => sum + b.verses.length, 0)
+      : blocks.length;
+    let madeSlides = 0;
+    setProgress(madeSlides, totalSlides);
 
     // PPT 생성
+    log("PPT 슬라이드 생성 시작…");
     const pptx = new PptxGenJS();
     pptx.defineLayout({ name: "LAYOUT_16x9", width: 13.33, height: 7.5 });
     pptx.layout = "LAYOUT_16x9";
-
-    // 타이틀 슬라이드 없음 (makeTitleSlide=false)
 
     for (const blk of blocks) {
       const { ref, verses } = blk;
@@ -182,13 +230,11 @@ goBtn.addEventListener("click", async () => {
           const s = pptx.addSlide();
           s.background = { data: bgDataURL };
 
-          // 제목
           s.addText(titleText, {
             x:0, y:0.3, w:"100%", h:0.8, fontSize:40, bold:true, align:"center",
             color: DEFAULTS.titleColor, fontFace: "Malgun Gothic"
           });
 
-          // 본문
           const head = DEFAULTS.showVerseNo ? `${vs.ch}:${vs.v} ` : "";
           const content = head + vs.text;
           const lines = splitByLen(content, DEFAULTS.maxChars);
@@ -199,9 +245,12 @@ goBtn.addEventListener("click", async () => {
             fontSize, bold:true, color: DEFAULTS.bodyColor,
             align:"center", valign:"middle", fontFace: "Dotum"
           });
+
+          madeSlides++;
+          setProgress(madeSlides, totalSlides);
+          if (madeSlides % 5 === 0) await sleep(0); // UI 갱신 틱
         }
       } else {
-        // (현재 경량 모드에선 사용하지 않지만, 남겨둠)
         const s = pptx.addSlide();
         s.background = { data: bgDataURL };
 
@@ -221,14 +270,26 @@ goBtn.addEventListener("click", async () => {
           fontSize, bold:true, color: DEFAULTS.bodyColor,
           align:"center", valign:"middle", fontFace: "Dotum"
         });
+
+        madeSlides++;
+        setProgress(madeSlides, totalSlides);
+        await sleep(0);
       }
     }
+    log(`슬라이드 생성 완료 (${madeSlides}/${totalSlides})`, "ok");
 
+    // 파일 저장
+    log("파일 저장…");
     const filename = `성경슬라이드_${Date.now()}.pptx`;
     await pptx.writeFile({ fileName: filename });
+    log(`완료: ${filename}`, "ok");
+    setBadge("ok");
   } catch (err) {
     console.error(err);
+    log(err.message || String(err), "err");
+    setBadge("err");
     alert(err.message || String(err));
+  } finally {
+    goBtn.disabled = false;
   }
 });
-
