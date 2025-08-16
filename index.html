@@ -4,7 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>성경 PPT 생성기 (간소 + 진행상태)</title>
-  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.16.0/dist/pptxgen.bundle.js"></script>
+  <!-- PptxGenJS CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.16.0/dist/pptxgen.bundle.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -14,9 +15,11 @@
     <div class="card">
       <label>성경 범위 입력</label>
       <textarea id="ref" rows="6" placeholder="예)
-요한복음 3:16
+요 3:16
 요 3:16~18
 요 3:16~4:3
+시 23:1~6
+
 여러 구간은 콤마(,) 또는 줄바꿈으로 구분하세요."></textarea>
 
       <div class="row right">
@@ -39,7 +42,14 @@
     </div>
   </main>
 
-  <script src="app.js"></script>
+  <!-- 앱 스크립트: defer + PptxGenJS 존재검사 -->
+  <script defer>
+    window.addEventListener('DOMContentLoaded', () => {
+      if (typeof window.PptxGenJS === 'undefined') {
+        alert('PptxGenJS 로드에 실패했습니다. 네트워크/광고차단기/방화벽 설정을 확인해 주세요.');
+      }
+    });
+  </script>
+  <script defer src="app.js"></script>
 </body>
 </html>
-
