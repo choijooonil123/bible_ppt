@@ -55,7 +55,7 @@ const STYLE = {
   fontFaceTitle: "Malgun Gothic",
   showVerseNo: true,
   outputName:  "BibleVerses.pptx",
-  background:  "BG_image.jpg", // 있으면 사용, 없으면 무시
+  background:  "BG_image.jpg", // 있으면 사용
 };
 
 // ========= DOM =========
@@ -63,7 +63,7 @@ const refEl    = document.getElementById("reference");
 const statusEl = document.getElementById("status");
 
 // ========= 로그/진행 =========
-function clearStatus(){ statusEl.innerHTML = ""; }
+function clearStatus(){ statusEl.innerHTML = ""; statusEl.style.display = 'block'; }
 function logStatus(msg){
   const p = document.createElement("p");
   p.textContent = msg;
@@ -108,6 +108,15 @@ async function exists(url){
   } catch { return false; }
 }
 
+// 텍스트 정리: 줄바꿈 통일 + XML에 허용되지 않는 제어문자 제거
+function sanitizeText(s){
+  return String(s)
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")  // XML 금지 제어문자 제거
+    .trim();
+}
+
 async function fetchVerses(book, sCh, sV, eCh, eV){
   const path = `bible/${book}.txt`;
   const res = await fetch(encodeURI(path));
@@ -115,7 +124,8 @@ async function fetchVerses(book, sCh, sV, eCh, eV){
   const txt = await res.text();
   const lines = txt.split(/\r?\n/);
   const out = [];
-  for (const line of lines){
+  for (const raw of lines){
+    const line = sanitizeText(raw);
     const m = line.match(/^(\d+):(\d+)\s+(.*)$/);
     if (!m) continue;
     const ch = +m[1], v = +m[2], body = m[3].trim();
@@ -136,6 +146,19 @@ function autoFont(base, total){
   return Math.max(18, base - dec);
 }
 
+// 배경 이미지를 data URL로 로드(안전)
+async function loadBgAsDataURL(path){
+  const res = await fetch(encodeURI(path));
+  if (!res.ok) throw new Error(`배경 이미지를 불러올 수 없습니다: ${path} (HTTP ${res.status})`);
+  const blob = await res.blob();
+  return await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
+}
+
 // ========= 메인: 버튼에서 호출 =========
 window.generatePPT = async function generatePPT(){
   clearStatus();
@@ -143,9 +166,9 @@ window.generatePPT = async function generatePPT(){
 
   try{
     if (typeof window.PptxGenJS === "undefined"){
-      throw new Error("PptxGenJS가 로드되지 않았습니다. (CDN 차단/네트워크 확인)");
+      throw new Error("PptxGenJS가 로드되지 않았습니다. (CDN/로컬 경로 확인)");
     }
-    const raw = (refEl.value || "").trim();
+    const raw = sanitizeText(refEl.value || "");
     if (!raw) throw new Error("성경 구절을 입력하세요.");
 
     // 1) 파싱
@@ -153,9 +176,12 @@ window.generatePPT = async function generatePPT(){
     const refs = splitItems(raw).map(parseRef);
     logStatus(`입력 구간 수: ${refs.length}`);
 
-    // 2) 배경 파일 확인
-    const hasBg = await exists(STYLE.background);
-    if (hasBg) logStatus(`배경 감지: ${STYLE.background}`);
+    // 2) 배경 준비 (data URL)
+    let bgDataUrl = null;
+    if (await exists(STYLE.background)) {
+      logStatus(`배경 감지: ${STYLE.background}`);
+      bgDataUrl = await loadBgAsDataURL(STYLE.background);
+    }
 
     // 3) 본문 로드
     logStatus("성경 본문 로드…");
@@ -186,7 +212,8 @@ window.generatePPT = async function generatePPT(){
 
       for (const vs of verses){
         const s = pptx.addSlide();
-        if (hasBg) s.background = { path: STYLE.background };
+
+        if (bgDataUrl) s.background = { data: bgDataUrl };
 
         // 제목
         s.addText(title, {
@@ -197,7 +224,7 @@ window.generatePPT = async function generatePPT(){
 
         // 본문
         const head = STYLE.showVerseNo ? `${vs.ch}:${vs.v} ` : "";
-        const content = head + vs.text;
+        const content = sanitizeText(head + vs.text);
         const lines = chunkBy(content, STYLE.maxChars);
         const fz = autoFont(STYLE.baseFont, content.length);
 
@@ -214,7 +241,10 @@ window.generatePPT = async function generatePPT(){
 
     logStatus("슬라이드 생성 완료");
     logStatus("파일 저장…");
-    await pptx.writeFile(STYLE.outputName);
+
+    // ✅ 버전 호환 안전: 객체 인자로 파일명 지정
+    await pptx.writeFile({ fileName: STYLE.outputName });
+
     logStatus(`✅ 완료: ${STYLE.outputName}`);
 
   }catch(err){
