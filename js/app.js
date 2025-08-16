@@ -108,12 +108,12 @@ async function exists(url){
   } catch { return false; }
 }
 
-// 텍스트 정리: 줄바꿈 통일 + XML에 허용되지 않는 제어문자 제거
+// 텍스트 정리: 줄바꿈 통일 + XML 금지 제어문자 제거
 function sanitizeText(s){
   return String(s)
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")  // XML 금지 제어문자 제거
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
     .trim();
 }
 
@@ -159,7 +159,7 @@ async function loadBgAsDataURL(path){
   });
 }
 
-// ========= 메인: 버튼에서 호출 =========
+// ========= 메인: 버튼/Enter에서 호출 =========
 window.generatePPT = async function generatePPT(){
   clearStatus();
   logStatus("생성 시작");
@@ -241,10 +241,7 @@ window.generatePPT = async function generatePPT(){
 
     logStatus("슬라이드 생성 완료");
     logStatus("파일 저장…");
-
-    // ✅ 버전 호환 안전: 객체 인자로 파일명 지정
     await pptx.writeFile({ fileName: STYLE.outputName });
-
     logStatus(`✅ 완료: ${STYLE.outputName}`);
 
   }catch(err){
@@ -253,3 +250,24 @@ window.generatePPT = async function generatePPT(){
     alert(err.message || String(err));
   }
 };
+
+// ===== Enter 전역 실행 + 중복 실행 방지 =====
+let _running = false;
+
+async function safeGenerate() {
+  if (_running) return;       // 중복 실행 방지
+  _running = true;
+  try { await window.generatePPT(); }
+  finally { _running = false; }
+}
+
+// 입력창에서 Enter로 실행
+document.getElementById("reference").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    safeGenerate();
+  }
+});
+
+// 버튼용으로 전역 노출 (index.html에서 onclick="safeGenerate()")
+window.safeGenerate = safeGenerate;
