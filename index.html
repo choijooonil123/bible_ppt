@@ -10,71 +10,13 @@
 </head>
 <body>
   <main class="wrap">
-    <h1>성경 PPT 생성기 (Web/JS)</h1>
-    <p class="hint">
-      입력 예: <code>요한복음 3:16~18</code>, <code>요한복음 3:16~4:3</code><br/>
-      여러 구간은 쉼표 또는 줄바꿈으로 구분: <code>요한복음 3:16~18, 시편 23:1~6</code>
-    </p>
+    <h1>성경 PPT 생성기 (간소 버전)</h1>
 
-    <div class="grid">
-      <div class="card">
-        <label>성경 범위 입력</label>
-        <textarea id="ref" rows="4" placeholder="요한복음 3:16~18, 시편 23:1~6"></textarea>
+    <div class="card">
+      <label>성경 범위 입력</label>
+      <textarea id="ref" rows="6" placeholder=""></textarea>
 
-        <div class="row">
-          <div>
-            <label>권 이름 자동완성</label>
-            <input id="book" list="bookList" placeholder="예) 요한복음" />
-            <datalist id="bookList"></datalist>
-          </div>
-          <div>
-            <label>추가</label>
-            <button id="addRef" type="button">범위 추가</button>
-          </div>
-        </div>
-
-        <div class="row">
-          <div>
-            <label>배경 이미지</label>
-            <input id="bgFile" type="file" accept="image/*" />
-            <div class="subhint">업로드 안 하면 <code>BG_image.jpg</code> 사용</div>
-          </div>
-          <div>
-            <label>배경 블러(px)</label>
-            <input id="blurPx" type="number" min="0" max="30" value="8" />
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <label>텍스트 옵션</label>
-        <div class="row">
-          <div>
-            <label>한 줄 최대 글자수</label>
-            <input id="maxChars" type="number" min="8" max="50" value="20" />
-          </div>
-          <div>
-            <label>기본 폰트 크기</label>
-            <input id="baseFont" type="number" min="16" max="64" value="32" />
-          </div>
-        </div>
-        <div class="row">
-          <div>
-            <label>본문 색상</label>
-            <input id="bodyColor" type="color" value="#FFFF00" />
-          </div>
-          <div>
-            <label>제목 색상</label>
-            <input id="titleColor" type="color" value="#558ED5" />
-          </div>
-        </div>
-
-        <div class="row">
-          <label><input id="showVerseNo" type="checkbox" checked /> 절 번호 표시</label>
-          <label><input id="oneVersePerSlide" type="checkbox" checked /> 절마다 슬라이드</label>
-          <label><input id="makeTitleSlide" type="checkbox" /> 시작 타이틀 슬라이드 생성</label>
-        </div>
-
+      <div class="row right">
         <button id="go" class="primary" type="button">PPT 생성</button>
       </div>
     </div>
