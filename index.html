@@ -8,7 +8,7 @@
   <!-- 스타일 -->
   <link rel="stylesheet" href="styles.css" />
 
-  <!-- PptxGenJS 로더: 로컬 → CDN(jsDelivr) → CDN(unpkg) 순 -->
+  <!-- PptxGenJS 로더 -->
   <script>
     (async function loadPptxGen() {
       const sources = [
@@ -50,10 +50,20 @@
 
     <button onclick="generatePPT()">PPT 생성</button>
 
-    <div id="status" style="display:block; margin-top:16px;"></div>
+    <!-- 진행상태 출력 영역 -->
+    <div id="status" style="margin-top:16px; padding:10px; border:1px solid #aaa; border-radius:5px; min-height:60px; font-size:14px; background:#f9f9f9; overflow-y:auto;"></div>
   </div>
 
   <script>
+    // 상태 메시지 추가 함수
+    function logStatus(msg) {
+      const status = document.getElementById("status");
+      const p = document.createElement("div");
+      p.textContent = "▶ " + msg;
+      status.appendChild(p);
+      status.scrollTop = status.scrollHeight;
+    }
+
     // Enter 키 입력 시 PPT 생성 실행
     document.getElementById("reference").addEventListener("keydown", function(e) {
       if (e.key === "Enter") {
@@ -61,6 +71,9 @@
         generatePPT();
       }
     });
+
+    // 전역에서 사용 가능하도록 export
+    window.logStatus = logStatus;
   </script>
 </body>
 </html>
