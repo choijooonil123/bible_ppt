@@ -1,114 +1,56 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>Bible PPT Generator</title>
-  <style>
-    body {
-      font-family: "Malgun Gothic", sans-serif;
-      background: #f2f2f2;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 50px;
-    }
-    h1 {
-      margin-bottom: 20px;
-    }
-    #inputBox {
-      width: 400px;
-      padding: 10px;
-      font-size: 16px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-    }
-    #generateBtn {
-      margin-top: 15px;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      border: none;
-      border-radius: 6px;
-      background-color: #4CAF50;
-      color: white;
-    }
-    #statusBox {
-      margin-top: 20px;
-      width: 400px;
-      min-height: 100px;
-      padding: 10px;
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      overflow-y: auto;
-      font-size: 14px;
-    }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>성경 PPT 생성기 (Web)</title>
+
+  <!-- 스타일 -->
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- PptxGenJS 로더: 로컬 → CDN(jsDelivr) → CDN(unpkg) 순 -->
+  <script>
+    (async function loadPptxGen() {
+      const sources = [
+        "libs/pptxgen.bundle.js",
+        "https://cdn.jsdelivr.net/npm/pptxgenjs@4.0.1/dist/pptxgen.bundle.js",
+        "https://unpkg.com/pptxgenjs@4.0.1/dist/pptxgen.bundle.js"
+      ];
+      for (const src of sources) {
+        try {
+          await new Promise((ok, no) => {
+            const s = document.createElement("script");
+            s.src = src; s.defer = true;
+            s.onload = ok; s.onerror = () => no(new Error("fail " + src));
+            document.head.appendChild(s);
+          });
+          if (window.PptxGenJS) {
+            console.log("PptxGenJS loaded from:", src);
+            return;
+          }
+        } catch (e) { console.warn(e.message); }
+      }
+      alert("PptxGenJS 로드 실패: 로컬 libs/pptxgen.bundle.js 또는 네트워크를 확인하세요.");
+    })();
+  </script>
+
+  <!-- 앱 스크립트 -->
+  <script defer src="app.js"></script>
 </head>
 <body>
-  <h1>Bible PPT Generator</h1>
+  <div class="container">
+    <h1>📖 성경 PPT 생성기</h1>
 
-  <!-- 입력란 -->
-  <input id="inputBox" type="text" placeholder="예: 창 1:1~5, 요 3:16" />
+    <label for="reference">성경 범위 입력</label>
+    <input
+      id="reference"
+      type="text"
+      placeholder="예) 요 3:16, 요 3:16~18, 요 3:16~4:3 (여러 구간은 콤마 또는 줄바꿈)"
+    />
 
-  <!-- 버튼 -->
-  <button id="generateBtn">PPT 생성</button>
+    <button onclick="generatePPT()">PPT 생성</button>
 
-  <!-- 상태 표시 -->
-  <div id="statusBox"></div>
-
-  <!-- PptxGenJS (로컬 파일 불러오기) -->
-  <script src="libs/pptxgen.bundle.js"></script>
-
-  <script>
-    const inputBox = document.getElementById("inputBox");
-    const generateBtn = document.getElementById("generateBtn");
-    const statusBox = document.getElementById("statusBox");
-
-    // 로그 추가 함수
-    function logStatus(msg) {
-      const p = document.createElement("p");
-      p.textContent = msg;
-      statusBox.appendChild(p);
-      statusBox.scrollTop = statusBox.scrollHeight;
-    }
-
-    // PPT 생성 버튼 클릭
-    generateBtn.addEventListener("click", () => {
-      statusBox.innerHTML = "";
-      logStatus("입력값 파싱 중…");
-
-      const inputText = inputBox.value.trim();
-      if (!inputText) {
-        logStatus("⚠️ 성경 구절을 입력하세요!");
-        return;
-      }
-
-      logStatus("성경 구절 추출 중…");
-      const verses = inputText.split(",").map(v => v.trim());
-
-      logStatus("슬라이드 생성 중…");
-
-      try {
-        const pptx = new PptxGenJS();
-
-        verses.forEach((verse, i) => {
-          let slide = pptx.addSlide();
-          slide.addText(verse, {
-            x: 0.5, y: 1, w: 8, h: 4,
-            fontSize: 28, align: "center", valign: "middle"
-          });
-        });
-
-        logStatus("저장 준비 완료…");
-        pptx.writeFile("BibleVerses.pptx").then(() => {
-          logStatus("✅ PPTX 생성 완료! BibleVerses.pptx 다운로드됨");
-        });
-
-      } catch (e) {
-        logStatus("❌ 오류 발생: " + e.message);
-      }
-    });
-  </script>
+    <div id="status" style="display:block; margin-top:16px;"></div>
+  </div>
 </body>
 </html>
