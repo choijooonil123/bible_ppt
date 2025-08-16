@@ -1,55 +1,114 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>성경 PPT 생성기 (간소 + 진행상태)</title>
-  <!-- PptxGenJS CDN -->
-  <script defer src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.16.0/dist/pptxgen.bundle.js"></script>
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="UTF-8">
+  <title>Bible PPT Generator</title>
+  <style>
+    body {
+      font-family: "Malgun Gothic", sans-serif;
+      background: #f2f2f2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 50px;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    #inputBox {
+      width: 400px;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    #generateBtn {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      background-color: #4CAF50;
+      color: white;
+    }
+    #statusBox {
+      margin-top: 20px;
+      width: 400px;
+      min-height: 100px;
+      padding: 10px;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      overflow-y: auto;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
-  <main class="wrap">
-    <h1>성경 PPT 생성기</h1>
+  <h1>Bible PPT Generator</h1>
 
-    <div class="card">
-      <label>성경 범위 입력</label>
-      <textarea id="ref" rows="6" placeholder="예)
-요 3:16
-요 3:16~18
-요 3:16~4:3
-시 23:1~6
-여러 구간은 콤마(,) 또는 줄바꿈으로 구분하세요."></textarea>
+  <!-- 입력란 -->
+  <input id="inputBox" type="text" placeholder="예: 창 1:1~5, 요 3:16" />
 
-      <div class="row right">
-        <button id="go" class="primary" type="button">PPT 생성</button>
-      </div>
-    </div>
+  <!-- 버튼 -->
+  <button id="generateBtn">PPT 생성</button>
 
-    <div class="card status">
-      <div class="status-head">
-        <strong>생성 상태</strong>
-        <span id="statusBadge" class="badge idle">대기</span>
-      </div>
+  <!-- 상태 표시 -->
+  <div id="statusBox"></div>
 
-      <div class="progress">
-        <div id="progBar" class="bar" style="width:0%"></div>
-      </div>
-      <div id="progText" class="prog-text">0% (0/0)</div>
+  <!-- PptxGenJS (로컬 파일 불러오기) -->
+  <script src="libs/pptxgen.bundle.js"></script>
 
-      <ul id="log" class="log"></ul>
-    </div>
-  </main>
+  <script>
+    const inputBox = document.getElementById("inputBox");
+    const generateBtn = document.getElementById("generateBtn");
+    const statusBox = document.getElementById("statusBox");
 
-  <!-- 앱 스크립트: defer + PptxGenJS 존재검사 -->
-  <script defer>
-    window.addEventListener('DOMContentLoaded', () => {
-      if (typeof window.PptxGenJS === 'undefined') {
-        alert('PptxGenJS 로드에 실패했습니다. 네트워크/광고차단기/방화벽 설정을 확인해 주세요.');
+    // 로그 추가 함수
+    function logStatus(msg) {
+      const p = document.createElement("p");
+      p.textContent = msg;
+      statusBox.appendChild(p);
+      statusBox.scrollTop = statusBox.scrollHeight;
+    }
+
+    // PPT 생성 버튼 클릭
+    generateBtn.addEventListener("click", () => {
+      statusBox.innerHTML = "";
+      logStatus("입력값 파싱 중…");
+
+      const inputText = inputBox.value.trim();
+      if (!inputText) {
+        logStatus("⚠️ 성경 구절을 입력하세요!");
+        return;
+      }
+
+      logStatus("성경 구절 추출 중…");
+      const verses = inputText.split(",").map(v => v.trim());
+
+      logStatus("슬라이드 생성 중…");
+
+      try {
+        const pptx = new PptxGenJS();
+
+        verses.forEach((verse, i) => {
+          let slide = pptx.addSlide();
+          slide.addText(verse, {
+            x: 0.5, y: 1, w: 8, h: 4,
+            fontSize: 28, align: "center", valign: "middle"
+          });
+        });
+
+        logStatus("저장 준비 완료…");
+        pptx.writeFile("BibleVerses.pptx").then(() => {
+          logStatus("✅ PPTX 생성 완료! BibleVerses.pptx 다운로드됨");
+        });
+
+      } catch (e) {
+        logStatus("❌ 오류 발생: " + e.message);
       }
     });
   </script>
-  <script defer src="app.js"></script>
 </body>
 </html>
-
